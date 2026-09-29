@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">گشنه های صنعتی اصفهان</string>
+    <string name="title">IUT Dining Sniper</string>
+    <string name="subtitle">خرید خودکار غذای دانشگاه صنعتی اصفهان</string>
+
+    <string name="student_id_hint">شماره دانشجویی</string>
+    <string name="password_hint">رمز عبور</string>
+    <string name="meal_label">وعده غذایی</string>
+    <string name="self_label">سلف</string>
+
+    <string name="start">شروع</string>
+    <string name="stop">توقف</string>
+    <string name="idle">آماده</string>
+    <string name="running">در حال اجرا…</string>
+
+    <string name="telegram">Telegram: @Amirs0lll</string>
+
+    <string-array name="meals">
+        <item>صبحانه</item>
+        <item>ناهار</item>
+        <item>شام</item>
+        <item>سحری</item>
+        <item>افطاری</item>
+    </string-array>
+
+    <string-array name="selfs">
+        <item>سلف مرکزی</item>
+        <item>آسمان</item>
+        <item>نیکان</item>
+        <item>شاهر</item>
+    </string-array>
+</resources>
