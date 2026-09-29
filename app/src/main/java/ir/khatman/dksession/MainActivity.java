@@ -5,7 +5,6 @@ import android.os.PowerManager;
 import android.text.method.ScrollingMovementMethod;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -19,7 +18,6 @@ import androidx.appcompat.app.AppCompatActivity;
 public class MainActivity extends AppCompatActivity implements SniperEngine.Log {
 
     private static final int[] MEAL_IDS = {1, 2, 3, 6, 7};
-    private static final int[] SELF_IDS = {0, 1, 2, 3};
 
     private EditText studentId, password;
     private Spinner mealSpinner, selfSpinner;
@@ -62,20 +60,21 @@ public class MainActivity extends AppCompatActivity implements SniperEngine.Log 
         selfAd.setDropDownViewResource(R.layout.spinner_dropdown_item);
         selfSpinner.setAdapter(selfAd);
 
-        // restore
         studentId.setText(prefs.getUser());
         password.setText(prefs.getPass());
         mealSpinner.setSelection(safe(prefs.getMeal(), MEAL_IDS.length));
-        selfSpinner.setSelection(safe(prefs.getSelf(), SELF_IDS.length));
+        selfSpinner.setSelection(safe(prefs.getSelf(), 4));
 
-        startBtn.setOnClickListener(v -> onStart());
-        stopBtn.setOnClickListener(v -> onStop());
+        startBtn.setOnClickListener(v -> startSniper());
+        stopBtn.setOnClickListener(v -> stopSniper());
 
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "sniper:lock");
     }
 
-    private int safe(int i, int max) { return (i < 0 || i >= max) ? 0 : i; }
+    private int safe(int i, int max) {
+        return (i < 0 || i >= max) ? 0 : i;
+    }
 
     @Override
     public void onLog(String line) {
@@ -83,12 +82,13 @@ public class MainActivity extends AppCompatActivity implements SniperEngine.Log 
         logScroll.post(() -> logScroll.fullScroll(View.FOCUS_DOWN));
     }
 
-    private void onStart() {
+    private void startSniper() {
         String u = studentId.getText().toString().trim();
         String p = password.getText().toString();
 
         if (u.isEmpty() || p.isEmpty()) {
-            Toast.makeText(this, "شماره دانشجویی و رمز را وارد کن", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "شماره دانشجویی و رمز را وارد کن",
+                    Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -105,38 +105,41 @@ public class MainActivity extends AppCompatActivity implements SniperEngine.Log 
         startBtn.setEnabled(false);
         stopBtn.setEnabled(true);
 
-        try { if (!wakeLock.isHeld()) wakeLock.acquire(); } catch (Exception ignored) {}
+        try {
+            if (!wakeLock.isHeld()) wakeLock.acquire();
+        } catch (Exception ignored) {}
 
         engine = new SniperEngine(this);
 
         worker = new Thread(() -> {
-            engine.run(u, p, mealId, selfName,
-                    3500,   // list interval
-                    2000,   // buy interval
-                    100);   // max buy attempts
-            runOnUiThread(this::onFinished);
+            engine.run(u, p, mealId, selfName, 3500, 2000, 100);
+            runOnUiThread(this::onSniperFinished);
         }, "sniper");
         worker.start();
     }
 
-    private void onStop() {
+    private void stopSniper() {
         if (engine != null) engine.stop();
         if (worker != null) worker.interrupt();
-        onFinished();
+        onSniperFinished();
     }
 
-    private void onFinished() {
+    private void onSniperFinished() {
         stateView.setText(R.string.idle);
         stateView.setTextColor(getResources().getColor(R.color.text_dim, getTheme()));
         startBtn.setEnabled(true);
         stopBtn.setEnabled(false);
-        try { if (wakeLock.isHeld()) wakeLock.release(); } catch (Exception ignored) {}
+        try {
+            if (wakeLock.isHeld()) wakeLock.release();
+        } catch (Exception ignored) {}
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         if (engine != null) engine.stop();
-        try { if (wakeLock.isHeld()) wakeLock.release(); } catch (Exception ignored) {}
+        try {
+            if (wakeLock.isHeld()) wakeLock.release();
+        } catch (Exception ignored) {}
     }
 }
