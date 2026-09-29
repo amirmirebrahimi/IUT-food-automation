@@ -1,4 +1,4 @@
-package ir.khatman.dksession;
+package ir.khatman.foodiut;
 
 import android.os.Handler;
 import android.os.Looper;
@@ -34,6 +34,12 @@ public class SniperEngine {
     public interface Log { void onLog(String line); }
 
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+
+    // fetchList status codes
+    private static final int FETCH_OK = 0;
+    private static final int FETCH_RATE_LIMIT = 1;
+    private static final int FETCH_AUTH = 2;
+    private static final int FETCH_ERROR = 3;
 
     private final OkHttpClient http;
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -91,21 +97,42 @@ public class SniperEngine {
 
                 // credit
                 Integer credit = getCredit(xsrf);
-                if (credit != null) log("[*] Credit: " + credit);
+                if (credit != null) log("  [*] Credit: " + credit);
 
                 // list
-                List<Food> foods = fetchList(mealId, xsrf);
-                if (foods == null) {
-                    log("[-] Fetch error");
+                FetchResult fr = fetchList(mealId, xsrf);
+
+                if (fr.status == FETCH_RATE_LIMIT) {
+                    log("  [!] Rate limited. Sleeping 30s...");
+                    sleep(30000);
+                    continue;
+                }
+                if (fr.status == FETCH_AUTH) {
+                    log("  [!] Session expired, re-login");
+                    if (!login(username, password)) {
+                        log("  [FAIL] re-login failed");
+                        return;
+                    }
+                    xsrf = getXsrf();
+                    if (xsrf == null || xsrf.isEmpty()) {
+                        log("  [!] XSRF lost after re-login");
+                        return;
+                    }
+                    continue;
+                }
+                if (fr.status == FETCH_ERROR) {
+                    log("  [-] Fetch error");
                     sleep(listIntervalMs);
                     continue;
                 }
-                if (foods.isEmpty()) {
-                    log("[-] No food available");
+
+                List<Food> foods = fr.foods;
+                if (foods == null || foods.isEmpty()) {
+                    log("  [-] No food available");
                     sleep(listIntervalMs);
                     continue;
                 }
-                log("[*] " + foods.size() + " item(s) in list");
+                log("  [*] " + foods.size() + " item(s) in list");
 
                 List<Food> buyable = new ArrayList<>();
                 for (Food f : foods) {
@@ -116,24 +143,24 @@ public class SniperEngine {
                     buyable.add(f);
                 }
                 if (buyable.isEmpty()) {
-                    log("[-] No buyable food for '" + selfName + "'");
+                    log("  [-] No buyable food for '" + selfName + "'");
                     sleep(listIntervalMs);
                     continue;
                 }
 
                 Collections.sort(buyable, (a, b) -> Integer.compare(a.price, b.price));
 
-                log("[OK] " + buyable.size() + " buyable:");
+                log("  [OK] " + buyable.size() + " buyable:");
                 int show = Math.min(5, buyable.size());
                 for (int i = 0; i < show; i++) {
                     Food f = buyable.get(i);
-                    log("    FoodID=" + f.foodId + "  " + f.foodName
+                    log("      FoodID=" + f.foodId + "  " + f.foodName
                             + "  Date=" + f.date + "  Price=" + f.price);
                 }
 
                 Food chosen = buyable.get(0);
                 log("");
-                log(">>> Selected: " + chosen.foodName
+                log("  >>> Selected: " + chosen.foodName
                         + " (FoodID=" + chosen.foodId + ", Date=" + chosen.date + ")");
 
                 if (buyLoop(chosen, xsrf, buyIntervalMs, maxAttempts)) {
@@ -155,7 +182,7 @@ public class SniperEngine {
     //  LOGIN (CAS)
     // ============================================================
     private boolean login(String user, String pass) throws IOException {
-        // 1) GET /  -> end at identity/login?signin=XXX
+        // 1) GET / -> end at identity/login?signin=XXX
         Resp r = follow("https://dining.iut.ac.ir/", 5);
         if (r == null) return false;
 
@@ -258,6 +285,15 @@ public class SniperEngine {
             Document d = Jsoup.parse(r.body);
             Element e = d.selectFirst("input[name=__RequestVerificationToken]");
             if (e != null && !e.attr("value").isEmpty()) return e.attr("value");
+
+            // Fallback: از کوکی
+            List<Cookie> cookies = http.cookieJar().loadForRequest(
+                    HttpUrl.parse("https://dining.iut.ac.ir/"));
+            for (Cookie c : cookies) {
+                if ("__RequestVerificationToken".equals(c.name())) {
+                    return c.value();
+                }
+            }
         } catch (Exception ignored) {}
         return null;
     }
@@ -283,7 +319,8 @@ public class SniperEngine {
     // ============================================================
     //  FETCH FOOD LIST
     // ============================================================
-    private List<Food> fetchList(int mealId, String xsrf) {
+    private FetchResult fetchList(int mealId, String xsrf) {
+        FetchResult fr = new FetchResult();
         try {
             HttpUrl url = HttpUrl.parse("https://dining.iut.ac.ir/api/v0/TransferFoodBuy")
                     .newBuilder()
@@ -298,8 +335,9 @@ public class SniperEngine {
                     .build();
             Response r = http.newCall(req).execute();
             int code = r.code();
-            if (code == 429 || code == 401 || code == 403) { r.close(); return null; }
-            if (code != 200) { r.close(); return null; }
+            if (code == 429) { r.close(); fr.status = FETCH_RATE_LIMIT; return fr; }
+            if (code == 401 || code == 403) { r.close(); fr.status = FETCH_AUTH; return fr; }
+            if (code != 200) { r.close(); fr.status = FETCH_ERROR; return fr; }
             String b = r.body() != null ? r.body().string() : "[]";
             r.close();
 
@@ -317,9 +355,12 @@ public class SniperEngine {
                 f.date = o.optString("Date", "");
                 out.add(f);
             }
-            return out;
+            fr.status = FETCH_OK;
+            fr.foods = out;
+            return fr;
         } catch (Exception e) {
-            return null;
+            fr.status = FETCH_ERROR;
+            return fr;
         }
     }
 
@@ -393,6 +434,11 @@ public class SniperEngine {
         String body;
     }
 
+    private static class FetchResult {
+        int status;
+        List<Food> foods;
+    }
+
     private Resp follow(String start, int maxHops) throws IOException {
         String cur = start;
         for (int i = 0; i < maxHops; i++) {
@@ -439,16 +485,26 @@ public class SniperEngine {
         String date;
     }
 
+    // ============================================================
+    //  COOKIE JAR (FIXED: merge by name, not replace)
+    // ============================================================
     static class MemCookieJar implements CookieJar {
-        private final Map<String, List<Cookie>> store = new HashMap<>();
+        private final Map<String, Map<String, Cookie>> store = new HashMap<>();
+
         @Override
         public void saveFromResponse(HttpUrl url, List<Cookie> cookies) {
-            store.put(url.host(), cookies);
+            String host = url.host();
+            Map<String, Cookie> hostStore = store.computeIfAbsent(host, k -> new HashMap<>());
+            for (Cookie c : cookies) {
+                hostStore.put(c.name(), c);
+            }
         }
+
         @Override
         public List<Cookie> loadForRequest(HttpUrl url) {
-            List<Cookie> c = store.get(url.host());
-            return c != null ? c : new ArrayList<>();
+            Map<String, Cookie> hostStore = store.get(url.host());
+            if (hostStore == null) return new ArrayList<>();
+            return new ArrayList<>(hostStore.values());
         }
     }
 }

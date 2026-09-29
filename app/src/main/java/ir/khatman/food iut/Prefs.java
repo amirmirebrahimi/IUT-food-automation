@@ -1,10 +1,10 @@
-package ir.khatman.dksession;
+package ir.khatman.foodiut;
 
 import android.content.Context;
 import android.content.SharedPreferences;
 
 public class Prefs {
-    private static final String NAME = "sniper_prefs";
+    private static final String NAME = "food_iut_prefs";
     private static final String K_USER = "user";
     private static final String K_PASS = "pass";
     private static final String K_MEAL = "meal";

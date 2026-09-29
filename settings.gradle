@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "dk-session-app"
+rootProject.name = "Food-iut"
 include ':app'

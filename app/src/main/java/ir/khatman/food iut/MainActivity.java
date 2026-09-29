@@ -1,4 +1,4 @@
-package ir.khatman.dksession;
+package ir.khatman.foodiut;
 
 import android.os.Bundle;
 import android.os.PowerManager;
@@ -18,6 +18,7 @@ import androidx.appcompat.app.AppCompatActivity;
 public class MainActivity extends AppCompatActivity implements SniperEngine.Log {
 
     private static final int[] MEAL_IDS = {1, 2, 3, 6, 7};
+    private static final int SELF_COUNT = 4;
 
     private EditText studentId, password;
     private Spinner mealSpinner, selfSpinner;
@@ -63,7 +64,7 @@ public class MainActivity extends AppCompatActivity implements SniperEngine.Log 
         studentId.setText(prefs.getUser());
         password.setText(prefs.getPass());
         mealSpinner.setSelection(safe(prefs.getMeal(), MEAL_IDS.length));
-        selfSpinner.setSelection(safe(prefs.getSelf(), 4));
+        selfSpinner.setSelection(safe(prefs.getSelf(), SELF_COUNT));
 
         startBtn.setOnClickListener(v -> startSniper());
         stopBtn.setOnClickListener(v -> stopSniper());
